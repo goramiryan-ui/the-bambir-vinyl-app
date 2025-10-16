@@ -1,58 +1,70 @@
 import express from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
-import { dbPromise } from "./database.js";
-import Stripe from "stripe";
+import sqlite3 from "sqlite3";
+import { open } from "sqlite";
 import { Telegraf } from "telegraf";
-import dotenv from "dotenv";
+import Stripe from "stripe";
 
-dotenv.config();
-
-const app = express();
+// ✅ Environment variables (Render reads them automatically)
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const DATABASE_URL = process.env.DATABASE_URL || "./database.sqlite";
 const PORT = process.env.PORT || 10000;
 
-// ✅ Initialize Stripe with your secret key
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// ✅ Check for required variables
+if (!BOT_TOKEN) {
+  console.error("❌ BOT_TOKEN is missing!");
+  process.exit(1);
+}
 
-// ✅ Middleware
+if (!STRIPE_SECRET_KEY) {
+  console.error("❌ STRIPE_SECRET_KEY is missing!");
+  process.exit(1);
+}
+
+// ✅ Initialize dependencies
+const stripe = new Stripe(STRIPE_SECRET_KEY);
+const bot = new Telegraf(BOT_TOKEN);
+const app = express();
+
 app.use(cors());
 app.use(bodyParser.json());
-app.use(express.static("public")); // serve miniapp.html and assets
+app.use(express.static("public"));
 
-// ✅ Root route (fixes “Cannot GET /”)
-app.get("/", (req, res) => {
-  res.send("🎸 GA Test E-commerce Vinyl Bot is running fine! Visit /miniapp.html");
+// ✅ Initialize SQLite database
+const dbPromise = open({
+  filename: DATABASE_URL,
+  driver: sqlite3.Database,
 });
 
-// ✅ Initialize Telegram Bot
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+(async () => {
+  const db = await dbPromise;
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      address TEXT,
+      phone TEXT,
+      quantity INTEGER,
+      amount INTEGER
+    )
+  `);
+  console.log("✅ Database initialized");
+})();
 
-// /start command
-bot.start(async (ctx) => {
-  await ctx.reply(
-    "🎸 Welcome to GA Test E-commerce Vinyl Store!\nClick below to buy your vinyl:",
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "🛒 Buy Now",
-              web_app: {
-                url: "https://the-bambir-vinyl-app.onrender.com/miniapp.html", // 👈 your live Mini App
-              },
-            },
-          ],
-        ],
-      },
-    }
-  );
-});
-
-// ✅ Stripe checkout endpoint
+// ✅ Stripe checkout route
 app.post("/create-checkout", async (req, res) => {
   try {
     const { name, address, phone, quantity } = req.body;
-    const prices = { 1: 2000, 2: 4000, 3: 6000 }; // in cents
+    const prices = { 1: 20, 2: 40, 3: 60 };
+    const amount = prices[quantity] * 100;
+
+    const db = await dbPromise;
+    await db.run(
+      "INSERT INTO orders (name, address, phone, quantity, amount) VALUES (?, ?, ?, ?, ?)",
+      [name, address, phone, quantity, amount / 100]
+    );
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -60,33 +72,46 @@ app.post("/create-checkout", async (req, res) => {
         {
           price_data: {
             currency: "usd",
-            product_data: { name: "GA Test E-commerce Vinyl" },
-            unit_amount: prices[quantity] || 2000,
+            product_data: { name: `Vinyl x${quantity}` },
+            unit_amount: amount / quantity,
           },
-          quantity: 1,
+          quantity,
         },
       ],
       mode: "payment",
-      success_url: "https://t.me/GA_Test_Eccomerce_bot",
-      cancel_url: "https://t.me/GA_Test_Eccomerce_bot",
+      success_url: "https://the-bambir-vinyl-app.onrender.com/success",
+      cancel_url: "https://the-bambir-vinyl-app.onrender.com/cancel",
     });
-
-    const db = await dbPromise;
-    await db.run(
-      `INSERT INTO sales (name, address, phone, quantity, amount, stripe_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [name, address, phone, quantity, prices[quantity] / 100, session.id]
-    );
 
     res.json({ url: session.url });
   } catch (error) {
-    console.error("Checkout error:", error);
-    res.status(500).json({ error: "Failed to create checkout session" });
+    console.error("❌ Stripe checkout error:", error);
+    res.status(500).json({ error: "Checkout failed" });
   }
 });
 
-// ✅ Start bot & web server
-bot.launch();
+// ✅ Telegram Bot start message
+bot.start((ctx) => {
+  ctx.reply("Welcome to GA Test Vinyl Store! 🎸 Click below to order your vinyl:", {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "💿 Buy Vinyl",
+            web_app: { url: "https://the-bambir-vinyl-app.onrender.com/miniapp.html" },
+          },
+        ],
+      ],
+    },
+  });
+});
+
+// ✅ Launch bot
+bot.launch().then(() => {
+  console.log("🤖 Telegram bot is running!");
+});
+
+// ✅ Start Express server
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
