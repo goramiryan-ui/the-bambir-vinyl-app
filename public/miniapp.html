@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>GA Test E-commerce Vinyl Checkout</title>
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    body { font-family: Arial; padding: 20px; max-width: 400px; margin: auto; }
+    input, select { width: 100%; margin: 8px 0; padding: 8px; }
+    button { background: black; color: white; padding: 10px; border: none; width: 100%; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h2>🎸 GA Test E-commerce Vinyl</h2>
+  <form id="orderForm">
+    <input type="text" id="name" placeholder="Full name" required />
+    <input type="text" id="address" placeholder="Delivery address" required />
+    <input type="tel" id="phone" placeholder="Phone number" required />
+    <label>Quantity</label>
+    <select id="quantity">
+      <option value="1">1 Vinyl – $20</option>
+      <option value="2">2 Vinyls – $40</option>
+      <option value="3">3 Vinyls – $60</option>
+    </select>
+    <p id="total">Total: $20</p>
+    <button type="submit">Checkout</button>
+  </form>
+
+  <script>
+    const prices = {1: 20, 2: 40, 3: 60};
+    const qty = document.getElementById("quantity");
+    const total = document.getElementById("total");
+    qty.addEventListener("change", () => {
+      total.textContent = `Total: $${prices[qty.value]}`;
+    });
+
+    document.getElementById("orderForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const data = {
+        name: name.value,
+        address: address.value,
+        phone: phone.value,
+        quantity: qty.value,
+      };
+
+      const res = await fetch("/create-checkout", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(data),
+      });
+      const { url } = await res.json();
+      window.location.href = url;
+    });
+  </script>
+</body>
+</html>
