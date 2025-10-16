@@ -2,7 +2,7 @@
   "name": "ga_test_ecommerce_bot",
   "version": "1.0.0",
   "description": "Telegram mini-app with Stripe checkout for GA_Test_Eccomerce_bot",
-  "type": "commonjs",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
