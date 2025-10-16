@@ -17,7 +17,7 @@ bot.start((ctx) => {
   ctx.reply(
     "🎸 Welcome to GA Test E-commerce Vinyl Store!\n\nOwn our limited-edition record.",
     Markup.inlineKeyboard([
-      [Markup.button.webApp("💿 Buy Now", "https://placeholder.com/miniapp.html")]
+      [Markup.button.webApp("💿 Buy Now", "https://the-bambir-vinyl-app.onrender.com")]
     ])
   );
 });
