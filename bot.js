@@ -38,7 +38,9 @@ const dbPromise = open({
 // ================== START MESSAGE ==================
 bot.start((ctx) => {
   ctx.replyWithPhoto(
-    { url: 'https://the-bambir-vinyl-app.onrender.com/public/vinyl-cover.jpg' }, // Replace with your own image if needed
+    {
+      url: 'https://images.squarespace-cdn.com/content/v1/5fc8d15fb12b6f2e3ebe1a95/877f9c2a-e18c-48f2-8da2-70a945efcc21/The+Bambir+-+Mankakan+Khagher+-+Childrens+Games.png?format=2500w',
+    },
     {
       caption:
         '*Welcome to The Bambir Telegram Shop!*\n\nMankakan Khagher Vinyl is now on sale!\n\nClick below to order your vinyl:',
