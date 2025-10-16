@@ -102,7 +102,9 @@ bot.on("text", async (ctx) => {
               [
                 {
                   text: "💳 Pay Now",
-                  web_app: { url: "https://the-bambir-vinyl-app.onrender.com/miniapp.html" },
+                  web_app: {
+  url: `https://the-bambir-vinyl-app.onrender.com/checkout?name=${encodeURIComponent(session.name)}&quantity=${session.quantity}&phone=${encodeURIComponent(session.phone)}&address=${encodeURIComponent(session.address)}`
+},
                 },
               ],
             ],
