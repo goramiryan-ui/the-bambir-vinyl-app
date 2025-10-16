@@ -11,6 +11,7 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const DATABASE_URL = process.env.DATABASE_URL || "./database.sqlite";
 const PORT = process.env.PORT || 10000;
+const STRIPE_DOMAIN = "https://the-bambir-vinyl-app.onrender.com";
 
 if (!BOT_TOKEN || !STRIPE_SECRET_KEY) {
   console.error("❌ Missing environment variables.");
@@ -53,7 +54,7 @@ const dbPromise = open({
 // Welcome message
 bot.start((ctx) => {
   ctx.replyWithMarkdown(
-    "*Welcome to The Bambir Telegram Shop!*\n\nMankakan Khagher Vinyl is now on sale!\nClick below to order your vinyl:",
+    "*Welcome to The Bambir Telegram Shop!*\n\nMankakan Khagher Vinyl is now on sale!\n\nClick below to order your vinyl:",
     Markup.inlineKeyboard([[Markup.button.callback("💿 Buy Now", "start_order")]])
   );
 });
@@ -65,7 +66,7 @@ bot.action("start_order", async (ctx) => {
   await db.run("INSERT INTO orders (user_id) VALUES (?)", [ctx.from.id]);
 });
 
-// Handle user replies (step-by-step)
+// Handle text inputs
 bot.on("text", async (ctx) => {
   const db = await dbPromise;
   const order = await db.get(
@@ -74,10 +75,10 @@ bot.on("text", async (ctx) => {
   );
   if (!order) return;
 
-  const currentStep = order.status || "name";
+  const step = order.status || "name";
 
-  // Step 1: Full name
-  if (currentStep === "pending" || currentStep === "name") {
+  // Step 1: Name
+  if (step === "pending" || step === "name") {
     await db.run("UPDATE orders SET name = ?, status = ? WHERE id = ?", [
       ctx.message.text,
       "quantity",
@@ -101,7 +102,7 @@ bot.on("text", async (ctx) => {
   }
 
   // Step 2b: Custom quantity
-  if (currentStep === "custom_quantity") {
+  if (step === "custom_quantity") {
     await db.run("UPDATE orders SET quantity = ?, status = ? WHERE id = ?", [
       ctx.message.text,
       "phone",
@@ -110,18 +111,24 @@ bot.on("text", async (ctx) => {
     return ctx.reply("Please enter your mobile number:");
   }
 
-  // Step 3: Phone number
-  if (currentStep === "phone") {
+  // Step 3: Phone number (validation)
+  if (step === "phone") {
+    const phone = ctx.message.text.trim();
+
+    if (!/^\d{9,}$/.test(phone)) {
+      return ctx.reply("❌ Please enter a valid phone number (digits only, min 9 digits).");
+    }
+
     await db.run("UPDATE orders SET phone = ?, status = ? WHERE id = ?", [
-      ctx.message.text,
+      phone,
       "address",
       order.id,
     ]);
     return ctx.reply("Please enter your delivery address:");
   }
 
-  // Step 4: Address
-  if (currentStep === "address") {
+  // Step 4: Address → Generate Stripe link
+  if (step === "address") {
     await db.run("UPDATE orders SET address = ?, status = ? WHERE id = ?", [
       ctx.message.text,
       "review",
@@ -130,12 +137,10 @@ bot.on("text", async (ctx) => {
 
     const updatedOrder = await db.get("SELECT * FROM orders WHERE id = ?", order.id);
 
-    // compute price
     const q = parseInt(updatedOrder.quantity);
     const prices = { 1: 20, 2: 40, 3: 60, 4: 80, 5: 100 };
     const amount = prices[q] ? prices[q] : q * 20;
 
-    // create Stripe session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [
@@ -149,8 +154,8 @@ bot.on("text", async (ctx) => {
         },
       ],
       mode: "payment",
-      success_url: "https://the-bambir-vinyl-app.onrender.com/success",
-      cancel_url: "https://the-bambir-vinyl-app.onrender.com/cancel",
+      success_url: `${STRIPE_DOMAIN}/success`,
+      cancel_url: `${STRIPE_DOMAIN}/cancel`,
     });
 
     await db.run("UPDATE orders SET status = ? WHERE id = ?", ["payment_link", order.id]);
@@ -158,13 +163,13 @@ bot.on("text", async (ctx) => {
     return ctx.replyWithMarkdown(
       `*Order Summary:*\n\n👤 Name: ${updatedOrder.name}\n📦 Quantity: ${updatedOrder.quantity}\n📱 Phone: ${updatedOrder.phone}\n🏠 Address: ${updatedOrder.address}\n\n💰 *Total: $${amount}*`,
       Markup.inlineKeyboard([
-        [Markup.button.url("💳 Pay Now", session.url)],
+        [Markup.button.webApp("💳 Pay Now", session.url)],
       ])
     );
   }
 });
 
-// Handle quantity button presses
+// Quantity selections
 bot.action(/qty_(.+)/, async (ctx) => {
   const quantity = ctx.match[1];
   const db = await dbPromise;
