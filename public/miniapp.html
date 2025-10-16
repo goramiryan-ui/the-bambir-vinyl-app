@@ -2,36 +2,70 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>GA Test E-commerce Vinyl Checkout</title>
+  <title>Mankakan Khagher Vinyl Checkout</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://js.stripe.com/v3/"></script>
   <style>
-    body { font-family: Arial; padding: 20px; max-width: 400px; margin: auto; }
-    input, select { width: 100%; margin: 8px 0; padding: 8px; }
-    button { background: black; color: white; padding: 10px; border: none; width: 100%; cursor: pointer; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background: #111;
+      color: #fff;
+      padding: 20px;
+      margin: 0;
+      font-size: 17px;
+    }
+    h2 { text-align: center; margin-bottom: 20px; }
+    input, select, button {
+      width: 100%;
+      margin: 10px 0;
+      padding: 12px;
+      border-radius: 6px;
+      border: none;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+    input, select { background: #222; color: white; }
+    button {
+      background: #fff; color: #000;
+      font-weight: bold; cursor: pointer; border-radius: 6px;
+    }
+    button:hover { opacity: 0.85; }
   </style>
 </head>
 <body>
-  <h2>🎸 GA Test E-commerce Vinyl</h2>
+  <h2>🎸 Mankakan Khagher Vinyl</h2>
   <form id="orderForm">
-    <input type="text" id="name" placeholder="Full name" required />
-    <input type="text" id="address" placeholder="Delivery address" required />
-    <input type="tel" id="phone" placeholder="Phone number" required />
+    <input id="name" type="text" placeholder="Full name" required />
+    <input id="address" type="text" placeholder="Delivery address" required />
+    <input id="phone" type="tel" placeholder="Phone number" required pattern="[0-9]{9,}" title="At least 9 digits" />
     <label>Quantity</label>
     <select id="quantity">
       <option value="1">1 Vinyl – $20</option>
       <option value="2">2 Vinyls – $40</option>
       <option value="3">3 Vinyls – $60</option>
+      <option value="4">4 Vinyls – $80</option>
+      <option value="5">5 Vinyls – $100</option>
+      <option value="6">6+ (custom)</option>
     </select>
     <p id="total">Total: $20</p>
-    <button type="submit">Checkout</button>
+    <button type="submit">Pay Now</button>
   </form>
 
   <script>
-    const prices = {1: 20, 2: 40, 3: 60};
+    const prices = {1: 20, 2: 40, 3: 60, 4: 80, 5: 100};
     const qty = document.getElementById("quantity");
     const total = document.getElementById("total");
+
     qty.addEventListener("change", () => {
-      total.textContent = `Total: $${prices[qty.value]}`;
+      if (qty.value === "6") {
+        const custom = prompt("Enter quantity:");
+        if (custom && !isNaN(custom)) {
+          total.textContent = `Total: $${custom * 20}`;
+          qty.dataset.custom = custom;
+        }
+      } else {
+        total.textContent = `Total: $${prices[qty.value]}`;
+      }
     });
 
     document.getElementById("orderForm").addEventListener("submit", async (e) => {
@@ -40,7 +74,7 @@
         name: name.value,
         address: address.value,
         phone: phone.value,
-        quantity: qty.value,
+        quantity: qty.dataset.custom || qty.value,
       };
 
       const res = await fetch("/create-checkout", {
@@ -48,8 +82,9 @@
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify(data),
       });
+
       const { url } = await res.json();
-      window.location.href = url;
+      window.location.href = url; // stays in Telegram mini app
     });
   </script>
 </body>
