@@ -1,26 +1,23 @@
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 
-// open DB connection
-export const dbPromise = open({
-  filename: "./sales.db",
-  driver: sqlite3.Database,
-});
+export async function initDB() {
+  const db = await open({
+    filename: "./database.sqlite",
+    driver: sqlite3.Database,
+  });
 
-// create sales table if not exists
-(async () => {
-  const db = await dbPromise;
   await db.exec(`
-    CREATE TABLE IF NOT EXISTS sales (
+    CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT,
       address TEXT,
       phone TEXT,
       quantity INTEGER,
-      amount INTEGER,
-      stripe_id TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      total REAL
     )
   `);
+
   console.log("✅ Database initialized");
-})();
+  return db;
+}
