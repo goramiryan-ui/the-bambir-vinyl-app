@@ -3,36 +3,30 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
-import { Telegraf } from "telegraf";
+import { Telegraf, Markup } from "telegraf";
 import Stripe from "stripe";
 
-// ✅ Environment variables (Render reads them automatically)
+// =================== CONFIG ===================
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const DATABASE_URL = process.env.DATABASE_URL || "./database.sqlite";
 const PORT = process.env.PORT || 10000;
 
-// ✅ Check for required variables
-if (!BOT_TOKEN) {
-  console.error("❌ BOT_TOKEN is missing!");
+if (!BOT_TOKEN || !STRIPE_SECRET_KEY) {
+  console.error("❌ Missing environment variables.");
   process.exit(1);
 }
 
-if (!STRIPE_SECRET_KEY) {
-  console.error("❌ STRIPE_SECRET_KEY is missing!");
-  process.exit(1);
-}
-
-// ✅ Initialize dependencies
-const stripe = new Stripe(STRIPE_SECRET_KEY);
+// =================== INIT ===================
 const bot = new Telegraf(BOT_TOKEN);
+const stripe = new Stripe(STRIPE_SECRET_KEY);
 const app = express();
 
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static("public"));
 
-// ✅ Initialize SQLite database
+// =================== DATABASE ===================
 const dbPromise = open({
   filename: DATABASE_URL,
   driver: sqlite3.Database,
@@ -43,39 +37,115 @@ const dbPromise = open({
   await db.exec(`
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT,
       name TEXT,
-      address TEXT,
       phone TEXT,
-      quantity INTEGER,
-      amount INTEGER
+      address TEXT,
+      quantity TEXT,
+      status TEXT DEFAULT 'pending'
     )
   `);
   console.log("✅ Database initialized");
 })();
 
-// ✅ Stripe checkout route
-app.post("/create-checkout", async (req, res) => {
-  try {
-    const { name, address, phone, quantity } = req.body;
-    const prices = { 1: 20, 2: 40, 3: 60 };
-    const amount = prices[quantity] * 100;
+// =================== BOT FLOW ===================
 
-    const db = await dbPromise;
-    await db.run(
-      "INSERT INTO orders (name, address, phone, quantity, amount) VALUES (?, ?, ?, ?, ?)",
-      [name, address, phone, quantity, amount / 100]
+// Welcome message
+bot.start((ctx) => {
+  ctx.replyWithMarkdown(
+    "*Welcome to The Bambir Telegram Shop!*\n\nMankakan Khagher Vinyl is now on sale!\nClick below to order your vinyl:",
+    Markup.inlineKeyboard([[Markup.button.callback("💿 Buy Now", "start_order")]])
+  );
+});
+
+// Start order flow
+bot.action("start_order", async (ctx) => {
+  ctx.reply("Please enter your full name:");
+  const db = await dbPromise;
+  await db.run("INSERT INTO orders (user_id) VALUES (?)", [ctx.from.id]);
+});
+
+// Handle user replies (step-by-step)
+bot.on("text", async (ctx) => {
+  const db = await dbPromise;
+  const order = await db.get(
+    "SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+    [ctx.from.id]
+  );
+  if (!order) return;
+
+  const currentStep = order.status || "name";
+
+  // Step 1: Full name
+  if (currentStep === "pending" || currentStep === "name") {
+    await db.run("UPDATE orders SET name = ?, status = ? WHERE id = ?", [
+      ctx.message.text,
+      "quantity",
+      order.id,
+    ]);
+    return ctx.reply(
+      "Select the quantity you'd like to order:",
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback("1", "qty_1"),
+          Markup.button.callback("2", "qty_2"),
+          Markup.button.callback("3", "qty_3"),
+        ],
+        [
+          Markup.button.callback("4", "qty_4"),
+          Markup.button.callback("5", "qty_5"),
+          Markup.button.callback("6+", "qty_custom"),
+        ],
+      ])
     );
+  }
 
+  // Step 2b: Custom quantity
+  if (currentStep === "custom_quantity") {
+    await db.run("UPDATE orders SET quantity = ?, status = ? WHERE id = ?", [
+      ctx.message.text,
+      "phone",
+      order.id,
+    ]);
+    return ctx.reply("Please enter your mobile number:");
+  }
+
+  // Step 3: Phone number
+  if (currentStep === "phone") {
+    await db.run("UPDATE orders SET phone = ?, status = ? WHERE id = ?", [
+      ctx.message.text,
+      "address",
+      order.id,
+    ]);
+    return ctx.reply("Please enter your delivery address:");
+  }
+
+  // Step 4: Address
+  if (currentStep === "address") {
+    await db.run("UPDATE orders SET address = ?, status = ? WHERE id = ?", [
+      ctx.message.text,
+      "review",
+      order.id,
+    ]);
+
+    const updatedOrder = await db.get("SELECT * FROM orders WHERE id = ?", order.id);
+
+    // compute price
+    const q = parseInt(updatedOrder.quantity);
+    const prices = { 1: 20, 2: 40, 3: 60, 4: 80, 5: 100 };
+    const amount = prices[q] ? prices[q] : q * 20;
+
+    // create Stripe session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [
         {
           price_data: {
             currency: "usd",
-            product_data: { name: `Vinyl x${quantity}` },
-            unit_amount: amount / quantity,
+            product_data: { name: `Mankakan Khagher Vinyl x${updatedOrder.quantity}` },
+            unit_amount: (amount * 100) / updatedOrder.quantity,
           },
-          quantity,
+          quantity: updatedOrder.quantity,
         },
       ],
       mode: "payment",
@@ -83,35 +153,47 @@ app.post("/create-checkout", async (req, res) => {
       cancel_url: "https://the-bambir-vinyl-app.onrender.com/cancel",
     });
 
-    res.json({ url: session.url });
-  } catch (error) {
-    console.error("❌ Stripe checkout error:", error);
-    res.status(500).json({ error: "Checkout failed" });
+    await db.run("UPDATE orders SET status = ? WHERE id = ?", ["payment_link", order.id]);
+
+    return ctx.replyWithMarkdown(
+      `*Order Summary:*\n\n👤 Name: ${updatedOrder.name}\n📦 Quantity: ${updatedOrder.quantity}\n📱 Phone: ${updatedOrder.phone}\n🏠 Address: ${updatedOrder.address}\n\n💰 *Total: $${amount}*`,
+      Markup.inlineKeyboard([
+        [Markup.button.url("💳 Pay Now", session.url)],
+      ])
+    );
   }
 });
 
-// ✅ Telegram Bot start message
-bot.start((ctx) => {
-  ctx.reply("Welcome to GA Test Vinyl Store! 🎸 Click below to order your vinyl:", {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "💿 Buy Vinyl",
-            web_app: { url: "https://the-bambir-vinyl-app.onrender.com/miniapp.html" },
-          },
-        ],
-      ],
-    },
-  });
+// Handle quantity button presses
+bot.action(/qty_(.+)/, async (ctx) => {
+  const quantity = ctx.match[1];
+  const db = await dbPromise;
+  const order = await db.get(
+    "SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+    [ctx.from.id]
+  );
+
+  if (quantity === "custom") {
+    await db.run("UPDATE orders SET status = ? WHERE id = ?", [
+      "custom_quantity",
+      order.id,
+    ]);
+    return ctx.reply("Please enter your desired quantity:");
+  }
+
+  await db.run("UPDATE orders SET quantity = ?, status = ? WHERE id = ?", [
+    quantity,
+    "phone",
+    order.id,
+  ]);
+  return ctx.reply("Please enter your mobile number:");
 });
 
-// ✅ Launch bot
-bot.launch().then(() => {
-  console.log("🤖 Telegram bot is running!");
+// =================== EXPRESS ===================
+app.get("/", (req, res) => {
+  res.send("✅ The Bambir Vinyl Bot backend is running.");
 });
 
-// ✅ Start Express server
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
+// =================== LAUNCH ===================
+bot.launch().then(() => console.log("🤖 Bot running!"));
+app.listen(PORT, () => console.log(`✅ Server running on ${PORT}`));
