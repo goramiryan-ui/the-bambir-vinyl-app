@@ -11,7 +11,6 @@ dotenv.config();
 const app = express();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Middleware
 app.use(cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"], allowedHeaders: ["Content-Type"] }));
 app.use(express.json());
 app.use(bodyParser.json());
@@ -68,7 +67,6 @@ app.post("/create-checkout", async (req, res) => {
       cancel_url: `${process.env.RENDER_URL}/cancel.html`,
     });
 
-    // ✅ Respond with the Stripe Checkout URL
     return res.json({ url: session.url });
   } catch (err) {
     console.error("❌ Checkout error:", err);
@@ -76,7 +74,7 @@ app.post("/create-checkout", async (req, res) => {
   }
 });
 
-// ✅ Fallback route to handle unknown URLs (avoids “Cannot GET /checkout”)
+// ✅ Fallback route (always last)
 app.use((req, res) => {
   res.status(404).send("⚠️ Route not found. The Bambir Vinyl server is alive but this path doesn’t exist.");
 });

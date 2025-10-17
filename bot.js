@@ -42,7 +42,6 @@ bot.on("text", async (ctx) => {
   if (!session || !session.step) return;
 
   switch (session.step) {
-    // STEP 1 - NAME
     case "name":
       session.name = text.trim();
       session.step = "quantity";
@@ -60,18 +59,18 @@ bot.on("text", async (ctx) => {
       });
       break;
 
-    // STEP 2 - CUSTOM QUANTITY
     case "custom_qty":
       if (isNaN(text) || Number(text) < 1) {
         await ctx.reply("❌ Please enter a valid number.");
       } else {
         session.quantity = Number(text);
         session.step = "phone";
-        await ctx.reply("📞 Enter your *phone number* (digits only, at least 9):", { parse_mode: "Markdown" });
+        await ctx.reply("📞 Enter your *phone number* (digits only, at least 9):", {
+          parse_mode: "Markdown",
+        });
       }
       break;
 
-    // STEP 3 - PHONE
     case "phone":
       if (!/^\d{9,}$/.test(text)) {
         await ctx.reply("❌ Please enter a valid phone number (digits only, at least 9).");
@@ -82,7 +81,6 @@ bot.on("text", async (ctx) => {
       }
       break;
 
-    // STEP 4 - ADDRESS
     case "address":
       session.address = text.trim();
       session.step = null;
@@ -103,8 +101,13 @@ bot.on("text", async (ctx) => {
                 {
                   text: "💳 Pay Now",
                   web_app: {
-  url: `https://the-bambir-vinyl-app.onrender.com/checkout?name=${encodeURIComponent(session.name)}&quantity=${session.quantity}&phone=${encodeURIComponent(session.phone)}&address=${encodeURIComponent(session.address)}`
-},
+                    // ✅ Fixed URL: miniapp.html instead of /checkout
+                    url: `https://the-bambir-vinyl-app.onrender.com/miniapp.html?name=${encodeURIComponent(
+                      session.name
+                    )}&quantity=${session.quantity}&phone=${encodeURIComponent(
+                      session.phone
+                    )}&address=${encodeURIComponent(session.address)}`,
+                  },
                 },
               ],
             ],
