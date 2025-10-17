@@ -11,38 +11,20 @@ dotenv.config();
 const app = express();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// ✅ Configure CORS to allow Telegram Mini App requests
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
-  })
-);
-
-// ✅ Handle preflight (OPTIONS) requests
-app.options("/create-checkout", (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.sendStatus(204);
-});
-
+// Middleware
+app.use(cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"], allowedHeaders: ["Content-Type"] }));
 app.use(express.json());
-app.use(express.static("public"));
 app.use(bodyParser.json());
+app.use(express.static("public"));
 
-// ✅ Root route for Render health check
-app.get("/", (req, res) => {
-  res.send("<h2>The Bambir Vinyl Bot is running 🎸</h2>");
-});
+// ✅ Root route for Render check
+app.get("/", (req, res) => res.send("<h2>The Bambir Vinyl Bot is running 🎸</h2>"));
 
-// ✅ Initialize SQLite database
-export const db = await open({
-  filename: "./sales.db", // use your actual file name here
+// ✅ SQLite Database
+const db = await open({
+  filename: "./sales.db",
   driver: sqlite3.Database,
 });
-
 await db.exec(`
   CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,52 +35,51 @@ await db.exec(`
     payment_status TEXT DEFAULT 'pending'
   )
 `);
-
 console.log("✅ Database initialized");
 
-// ✅ Create Stripe Checkout Session
+// ✅ Stripe Checkout API route
 app.post("/create-checkout", async (req, res) => {
   console.log("📦 Incoming checkout data:", req.body);
-
-  const { name, address, phone, quantity } = req.body;
-
-  if (!name || !address || !phone || !quantity) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
-
-  await db.run(
-    "INSERT INTO orders (name, address, phone, quantity) VALUES (?, ?, ?, ?)",
-    [name, address, phone, quantity]
-  );
-
   try {
+    const { name, address, phone, quantity } = req.body;
+    if (!name || !address || !phone || !quantity) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    await db.run(
+      "INSERT INTO orders (name, address, phone, quantity) VALUES (?, ?, ?, ?)",
+      [name, address, phone, quantity]
+    );
+
     const session = await stripe.checkout.sessions.create({
+      mode: "payment",
       payment_method_types: ["card"],
       line_items: [
         {
           price_data: {
             currency: "usd",
             product_data: { name: "The Bambir Vinyl – Mankakan Khagher" },
-            unit_amount: 2000, // $20 per vinyl
+            unit_amount: 2000,
           },
-          quantity: quantity,
+          quantity,
         },
       ],
-      mode: "payment",
       success_url: `${process.env.RENDER_URL}/success.html`,
       cancel_url: `${process.env.RENDER_URL}/cancel.html`,
-      metadata: { name, address, phone, quantity },
     });
 
-    res.json({ url: session.url });
-  } catch (error) {
-    console.error("❌ Stripe error:", error);
-    res.status(500).json({ error: "Stripe session creation failed" });
+    // ✅ Respond with the Stripe Checkout URL
+    return res.json({ url: session.url });
+  } catch (err) {
+    console.error("❌ Checkout error:", err);
+    res.status(500).json({ error: "Failed to create checkout session" });
   }
 });
 
-// ✅ Start server
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🌐 Server running on port ${PORT}`);
+// ✅ Fallback route to handle unknown URLs (avoids “Cannot GET /checkout”)
+app.use((req, res) => {
+  res.status(404).send("⚠️ Route not found. The Bambir Vinyl server is alive but this path doesn’t exist.");
 });
+
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`🌐 Server running on port ${PORT}`));
