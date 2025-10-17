@@ -34,8 +34,8 @@ app.get("/checkout", async (req, res) => {
           quantity: totalQuantity,
         },
       ],
-      success_url: "https://t.me/GA_Test_Eccomerce_bot",
-      cancel_url: "https://t.me/GA_Test_Eccomerce_bot",
+      success_url: "https://the-bambir-vinyl-app.onrender.com/success.html",
+      cancel_url: "https://the-bambir-vinyl-app.onrender.com/cancel.html",
     });
 
     // 🔁 Redirect user to Stripe checkout

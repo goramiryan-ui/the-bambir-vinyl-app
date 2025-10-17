@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Payment Success - The Bambir Vinyl</title>
+  <style>
+    body {
+      background: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 60px 20px;
+    }
+    h1 {
+      color: #00ff88;
+      margin-bottom: 10px;
+    }
+    p {
+      color: #ccc;
+      margin-bottom: 40px;
+    }
+    button {
+      background: #fff;
+      color: #000;
+      border: none;
+      padding: 14px 30px;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>✅ Payment Successful!</h1>
+  <p>Thank you for purchasing <strong>Mankakan Khagher Vinyl</strong>.<br>Your order is being processed.</p>
+  <button onclick="closeApp()">Close</button>
+
+  <script>
+    function closeApp() {
+      if (window.Telegram?.WebApp) {
+        Telegram.WebApp.close();
+      } else {
+        window.location.href = 'https://t.me/GA_Test_Eccomerce_bot';
+      }
+    }
+  </script>
+</body>
+</html>
