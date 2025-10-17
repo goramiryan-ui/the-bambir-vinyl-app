@@ -14,16 +14,17 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 
-// ✅ Root route for Render check
+// ✅ Root route for Render health check
 app.get("/", (req, res) => {
   res.send("<h2>The Bambir Vinyl Bot is running 🎸</h2>");
 });
 
-// ✅ SQLite Database
+// ✅ Initialize SQLite database
 const db = await open({
   filename: "./sales.db",
   driver: sqlite3.Database,
 });
+
 await db.exec(`
   CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,12 +35,12 @@ await db.exec(`
     payment_status TEXT DEFAULT 'pending'
   )
 `);
+
 console.log("✅ Database initialized");
 
 // ✅ Stripe Checkout Session
 app.post("/create-checkout", async (req, res) => {
   try {
-    console.log("📦 Incoming checkout data:", req.body);
     const { name, address, phone, quantity } = req.body;
 
     if (!name || !address || !phone || !quantity) {
@@ -58,14 +59,15 @@ app.post("/create-checkout", async (req, res) => {
           price_data: {
             currency: "usd",
             product_data: { name: "The Bambir Vinyl – Mankakan Khagher" },
-            unit_amount: 2000, // $20 per vinyl
+            unit_amount: 2000,
           },
           quantity: quantity,
         },
       ],
       mode: "payment",
-      success_url: `${process.env.RENDER_URL}/success.html`,
-      cancel_url: `${process.env.RENDER_URL}/cancel.html`,
+      // ✅ Hardcoded absolute URLs (so Stripe always accepts them)
+      success_url: "https://the-bambir-vinyl-app.onrender.com/success.html",
+      cancel_url: "https://the-bambir-vinyl-app.onrender.com/cancel.html",
       metadata: { name, address, phone, quantity },
     });
 
