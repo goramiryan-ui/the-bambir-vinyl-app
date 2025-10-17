@@ -52,40 +52,39 @@
   </form>
 
   <script>
-    const prices = {1: 20, 2: 40, 3: 60, 4: 80, 5: 100};
-    const qty = document.getElementById("quantity");
-    const total = document.getElementById("total");
+  const prices = {1: 20, 2: 40, 3: 60};
+  const qty = document.getElementById("quantity");
+  const total = document.getElementById("total");
 
-    qty.addEventListener("change", () => {
-      if (qty.value === "6") {
-        const custom = prompt("Enter quantity:");
-        if (custom && !isNaN(custom)) {
-          total.textContent = `Total: $${custom * 20}`;
-          qty.dataset.custom = custom;
-        }
-      } else {
-        total.textContent = `Total: $${prices[qty.value]}`;
-      }
-    });
+  qty.addEventListener("change", () => {
+    total.textContent = `Total: $${prices[qty.value]}`;
+  });
 
-    document.getElementById("orderForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const data = {
-        name: name.value,
-        address: address.value,
-        phone: phone.value,
-        quantity: qty.dataset.custom || qty.value,
-      };
+  document.getElementById("orderForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = {
+      name: name.value,
+      address: address.value,
+      phone: phone.value,
+      quantity: qty.value,
+    };
 
+    try {
       const res = await fetch("https://the-bambir-vinyl-app.onrender.com/create-checkout", {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
 
+      if (!res.ok) throw new Error("Network response was not ok");
       const { url } = await res.json();
-      window.location.href = url; // stays in Telegram mini app
-    });
-  </script>
+      window.location.href = url;
+    } catch (err) {
+      console.error("Error creating checkout:", err);
+      alert("⚠️ Unable to connect to payment server. Please try again.");
+    }
+  });
+</script>
+
 </body>
 </html>
