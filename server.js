@@ -11,13 +11,23 @@ dotenv.config();
 const app = express();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+// ✅ Configure CORS to allow Telegram Mini App requests
 app.use(
   cors({
-    origin: "*", // allow Telegram and all origins
+    origin: "*",
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type"],
   })
 );
+
+// ✅ Handle preflight (OPTIONS) requests
+app.options("/create-checkout", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.sendStatus(204);
+});
+
 app.use(express.json());
 app.use(express.static("public"));
 app.use(bodyParser.json());
@@ -29,7 +39,7 @@ app.get("/", (req, res) => {
 
 // ✅ Initialize SQLite database
 export const db = await open({
-  filename: "./orders.db",
+  filename: "./sales.db", // use your actual file name here
   driver: sqlite3.Database,
 });
 
@@ -48,33 +58,43 @@ console.log("✅ Database initialized");
 
 // ✅ Create Stripe Checkout Session
 app.post("/create-checkout", async (req, res) => {
+  console.log("📦 Incoming checkout data:", req.body);
+
   const { name, address, phone, quantity } = req.body;
-  const amount = 2000 * Number(quantity); // $20 each vinyl
+
+  if (!name || !address || !phone || !quantity) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
 
   await db.run(
     "INSERT INTO orders (name, address, phone, quantity) VALUES (?, ?, ?, ?)",
     [name, address, phone, quantity]
   );
 
-  const session = await stripe.checkout.sessions.create({
-    payment_method_types: ["card"],
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: { name: "The Bambir Vinyl – Mankakan Khagher" },
-          unit_amount: 2000,
+  try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: { name: "The Bambir Vinyl – Mankakan Khagher" },
+            unit_amount: 2000, // $20 per vinyl
+          },
+          quantity: quantity,
         },
-        quantity: quantity,
-      },
-    ],
-    mode: "payment",
-    success_url: `${process.env.RENDER_URL}/success.html`,
-    cancel_url: `${process.env.RENDER_URL}/cancel.html`,
-    metadata: { name, address, phone, quantity },
-  });
+      ],
+      mode: "payment",
+      success_url: `${process.env.RENDER_URL}/success.html`,
+      cancel_url: `${process.env.RENDER_URL}/cancel.html`,
+      metadata: { name, address, phone, quantity },
+    });
 
-  res.json({ url: session.url });
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error("❌ Stripe error:", error);
+    res.status(500).json({ error: "Stripe session creation failed" });
+  }
 });
 
 // ✅ Start server
