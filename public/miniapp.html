@@ -77,7 +77,7 @@
         quantity: qty.dataset.custom || qty.value,
       };
 
-      const res = await fetch("/create-checkout", {
+      const res = await fetch("https://the-bambir-vinyl-app.onrender.com/create-checkout", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify(data),
