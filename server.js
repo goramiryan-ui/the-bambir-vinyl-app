@@ -11,7 +11,13 @@ dotenv.config();
 const app = express();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-app.use(cors());
+app.use(
+  cors({
+    origin: "*", // allow Telegram and all origins
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"],
+  })
+);
 app.use(express.json());
 app.use(express.static("public"));
 app.use(bodyParser.json());
